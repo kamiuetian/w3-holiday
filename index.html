@@ -435,27 +435,58 @@
       document.addEventListener('keydown', (e)=> {
         if(e.key === 'Escape' && modal.classList.contains('open')) close();
       });
+      const FORM_ENDPOINT = 'https://www.ranzotech.com/form/contact.php';
+
+      async function submitInquiry(){
+        const fd = new FormData(form);
+        const payload = new FormData();
+        payload.append('name', (fd.get('name') || '').toString().trim());
+        payload.append('company', (fd.get('organization') || '').toString().trim());
+        payload.append('role', (fd.get('role') || '').toString().trim());
+        payload.append('buyer_type', (fd.get('buyer_type') || '').toString());
+        payload.append('intent', (fd.get('intended_use') || '').toString().trim());
+        payload.append('budget', (fd.get('budget_band') || '').toString());
+        payload.append('message', (fd.get('message') || '').toString().trim());
+        payload.append('domain', location.hostname || document.title || '');
+        payload.append('display_email', (fd.get('displayed_mailbox') || '').toString());
+        payload.append('source_url', location.href);
+        payload.append('website', '');
+        payload.append('response', 'json');
+
+        const resp = await fetch(FORM_ENDPOINT, {
+          method: 'POST',
+          mode: 'cors',
+          headers: { Accept: 'application/json' },
+          body: payload,
+        });
+
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error('Form endpoint response invalid. Please try again later.');
+        }
+
+        const body = await resp.json().catch(() => null);
+        if (!resp.ok || !body || body.success !== true) {
+          throw new Error((body && body.message) || 'Inquiry submission failed. Please try again.');
+        }
+      }
 
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
-        status.textContent = 'Sending…';
+        const sendBtn = document.getElementById('sendBtn');
+        if (sendBtn) sendBtn.disabled = true;
+        status.textContent = 'Sending inquiry...';
 
-        // NOTE: Replace the endpoint below with your preferred intake API.
-        // This implementation provides a safe no-backend fallback: it opens a prefilled mailto.
         try {
-          const fd = new FormData(form);
-          const lines = [];
-          for (const [k,v] of fd.entries()) {
-            lines.push(`${k}: ${v}`);
-          }
-          const subject = encodeURIComponent('Confidential Inquiry — w3.holiday');
-          const body = encodeURIComponent(lines.join('\n'));
-          window.location.href = `mailto:inquiries@ranzotech.com?subject=${subject}&body=${body}`;
-          status.textContent = 'Opened email composer. If you prefer, email inquiries@ranzotech.com directly.';
-          setTimeout(close, 600);
+          await submitInquiry();
+          form.reset();
+          status.textContent = 'Inquiry sent successfully. We will contact you shortly.';
+          setTimeout(close, 900);
         } catch (err) {
           console.error(err);
-          status.textContent = 'Delivery failed. Please email inquiries@ranzotech.com.';
+          status.textContent = err && err.message ? err.message : 'Delivery failed. Please email inquiries@ranzotech.com.';
+        } finally {
+          if (sendBtn) sendBtn.disabled = false;
         }
       });
     })();
